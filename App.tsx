@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Product, CartItem } from './types';
 import Header from './components/Header';
 import ProductCard from './components/ProductCard';
@@ -7,31 +7,80 @@ import ProductForm from './components/ProductForm';
 import Cart from './components/Cart';
 import Checkout from './components/Checkout';
 import Confirmation from './components/Confirmation';
-import { AddIcon } from './components/IconComponents';
+import { AddIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from './components/IconComponents';
 import HomeDescription from './components/HomeDescription';
+import { initialProducts } from './data/initialProducts';
+import { encodeProductsForUrl, decodeProductsFromUrl } from './services/urlService';
+
+const APP_PRODUCTS_KEY = 'novar-decohome-products';
+
+// Function to initialize products state
+const initializeProducts = (): Product[] => {
+  // 1. Prioritize products from URL hash
+  const productsFromUrl = decodeProductsFromUrl();
+  if (productsFromUrl) {
+    // If we load from the URL, also update localStorage for persistence on refresh
+    try {
+      localStorage.setItem(APP_PRODUCTS_KEY, JSON.stringify(productsFromUrl));
+    } catch (error) {
+      console.error("Error saving URL products to localStorage:", error);
+    }
+    return productsFromUrl;
+  }
+
+  // 2. Fallback to localStorage
+  try {
+    const storedProducts = localStorage.getItem(APP_PRODUCTS_KEY);
+    if (storedProducts) {
+      return JSON.parse(storedProducts);
+    }
+  } catch (error) {
+    console.error("Error loading products from localStorage:", error);
+  }
+
+  // 3. Fallback to initial products for first-time visitors
+  try {
+    localStorage.setItem(APP_PRODUCTS_KEY, JSON.stringify(initialProducts));
+  } catch (error) {
+    console.error("Error saving initial products to localStorage:", error);
+  }
+  return initialProducts;
+};
+
 
 export default function App() {
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const storedProducts = localStorage.getItem('novar-decohome-products');
-      return storedProducts ? JSON.parse(storedProducts) : [];
-    } catch (error) {
-      console.error("Error reading products from localStorage", error);
-      return [];
-    }
-  });
+  const [products, setProducts] = useState<Product[]>(initializeProducts);
   
   const [view, setView] = useState<'gallery' | 'form' | 'checkout' | 'confirmation'>('gallery');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState('');
+
+  // Audio state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     try {
-      localStorage.setItem('novar-decohome-products', JSON.stringify(products));
+      localStorage.setItem(APP_PRODUCTS_KEY, JSON.stringify(products));
     } catch (error) {
       console.error("Error saving products to localStorage", error);
     }
   }, [products]);
+  
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(error => {
+          console.error("Audio playback failed:", error);
+          setIsPlaying(false);
+        });
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
 
   const addProduct = useCallback((newProduct: Omit<Product, 'id'>) => {
     setProducts(prevProducts => [
@@ -95,6 +144,20 @@ export default function App() {
     setView('gallery');
   }, []);
 
+  const handleShare = useCallback(() => {
+    const encodedData = encodeProductsForUrl(products);
+    const shareableLink = `${window.location.origin}${window.location.pathname}#${encodedData}`;
+    
+    navigator.clipboard.writeText(shareableLink).then(() => {
+      setShareFeedback('¡Enlace copiado!');
+      setTimeout(() => setShareFeedback(''), 2000);
+    }).catch(err => {
+      console.error('Failed to copy link: ', err);
+      setShareFeedback('Error al copiar');
+      setTimeout(() => setShareFeedback(''), 2000);
+    });
+  }, [products]);
+
 
   const cartCount = useMemo(() => {
     return cart.reduce((count, item) => count + item.quantity, 0);
@@ -145,7 +208,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-greige text-brand-black font-sans">
-      <Header cartCount={cartCount} onCartClick={() => setIsCartOpen(true)} />
+      <Header 
+        cartCount={cartCount} 
+        onCartClick={() => setIsCartOpen(true)}
+        onShare={handleShare}
+        shareFeedback={shareFeedback}
+      />
       <main className="container mx-auto p-4 sm:p-6 lg:p-8">
         {renderContent()}
       </main>
@@ -157,6 +225,29 @@ export default function App() {
         onUpdateQuantity={handleUpdateCartQuantity}
         onProceedToCheckout={handleProceedToCheckout}
       />
+      
+      {/* ¡CAMBIA ESTE ENLACE por un enlace directo a un archivo .mp3! */}
+      <audio
+        ref={audioRef}
+        src="https://storage.googleapis.com/maker-suit-tools-us-prod-0/projects/16383618/audio/21175628_20240508003632.mp3"
+        loop
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        // @ts-ignore - volume is a valid attribute
+        volume="0.2"
+      ></audio>
+
+      <button
+        onClick={togglePlay}
+        className="fixed bottom-6 left-6 lg:bottom-8 lg:left-8 bg-brand-black text-white p-3 rounded-full shadow-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-greige focus:ring-brand-black transition-transform transform hover:scale-105 z-20"
+        aria-label={isPlaying ? 'Pausar música' : 'Reproducir música'}
+      >
+        {isPlaying ? (
+          <SpeakerWaveIcon className="h-5 w-5" />
+        ) : (
+          <SpeakerXMarkIcon className="h-5 w-5" />
+        )}
+      </button>
     </div>
   );
 }
