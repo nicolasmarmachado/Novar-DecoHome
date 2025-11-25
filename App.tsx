@@ -229,7 +229,7 @@ export default function App() {
       {/* ¡CAMBIA ESTE ENLACE por un enlace directo a un archivo .mp3! */}
       <audio
         ref={audioRef}
-        src="https://storage.googleapis.com/maker-suit-tools-us-prod-0/projects/16383618/audio/21175628_20240508003632.mp3"
+        src="https://www.udio.com/songs/iVAXRPfkDba6iZeTZbwtBD?utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing"
         loop
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
